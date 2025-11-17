@@ -122,4 +122,18 @@ export const planetData: Record<string, PlanetInfo> = {
     funFact:
       'Neptunus memiliki angin tercepat di tata surya, mencapai kecepatan 2.100 km/jam!',
   },
+  Sun: {
+    name: 'Matahari',
+    description:
+      'Bintang di pusat tata surya kita. Sumber energi utama bagi semua planet.',
+    diameter: '1.392.700 km',
+    distanceFromSun: 'Pusat tata surya',
+    orbitalPeriod: 'Tidak mengorbit',
+    rotationPeriod: '25-35 hari (bervariasi)',
+    moons: '8 planet dan banyak objek lainnya',
+    composition: 'Plasma (hidrogen, helium)',
+    temperature: '5.500°C (permukaan), 15 juta°C (inti)',
+    funFact:
+      'Matahari mengandung 99,86% massa seluruh tata surya!',
+  },
 }

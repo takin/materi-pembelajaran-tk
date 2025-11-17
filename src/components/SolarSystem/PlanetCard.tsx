@@ -8,6 +8,7 @@ const getPlanetImageUrl = (planetName: string): string => {
   // Using direct image URLs from reliable sources
   // These URLs point directly to image files and should be accessible
   const planetImages: Record<string, string> = {
+    Sun: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/The_Sun_by_the_Atmospheric_Imaging_Assembly_of_NASA%27s_Solar_Dynamics_Observatory_-_20100819.jpg/600px-The_Sun_by_the_Atmospheric_Imaging_Assembly_of_NASA%27s_Solar_Dynamics_Observatory_-_20100819.jpg',
     Mercury:
       'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Mercury_in_true_color.jpg/600px-Mercury_in_true_color.jpg',
     Venus:

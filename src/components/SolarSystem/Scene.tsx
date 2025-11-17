@@ -30,40 +30,161 @@ function convertBase64ToBlob(base64: string): Blob {
   return new Blob([ab], { type: mimeString })
 }
 
-function getPlanetDataFromStorage(planetName: string): {
-  description?: string
-  audio?: string
-} | null {
+/**
+ * Get cached planet/sun description from local storage
+ * Audio is stored separately in IndexedDB due to size limitations
+ */
+function getPlanetDescriptionFromStorage(planetName: string): string | null {
   try {
     const storedData = localStorage.getItem('planetData')
-    if (!storedData) return null
+    if (!storedData) {
+      console.log(
+        `[Cache] No description found in localStorage for ${planetName}`,
+      )
+      return null
+    }
 
     const allPlanetData = JSON.parse(storedData)
-    return allPlanetData[planetName] || null
+    const description = allPlanetData[planetName]?.description || null
+
+    if (description) {
+      console.log(`[Cache] Found description for ${planetName}`)
+    } else {
+      console.log(
+        `[Cache] No description found for ${planetName} in localStorage`,
+      )
+    }
+
+    return description
   } catch (error) {
-    console.error('Error reading from localStorage:', error)
+    console.error('Error reading description from localStorage:', error)
     return null
   }
 }
 
-function savePlanetDataToStorage(
+/**
+ * Save planet/sun description to local storage
+ * Only saves description, audio is stored in IndexedDB separately
+ */
+function savePlanetDescriptionToStorage(
   planetName: string,
-  data: { description?: string; audio?: string },
+  description: string,
 ) {
   try {
     const storedData = localStorage.getItem('planetData')
     const allPlanetData = storedData ? JSON.parse(storedData) : {}
 
-    // Merge existing data with new data
-    allPlanetData[planetName] = {
-      ...allPlanetData[planetName],
-      ...data,
+    // Only save description, not audio (audio goes to IndexedDB)
+    if (!allPlanetData[planetName]) {
+      allPlanetData[planetName] = {}
     }
+    allPlanetData[planetName].description = description
 
     localStorage.setItem('planetData', JSON.stringify(allPlanetData))
+
+    console.log(`[Cache] Saved description for ${planetName}`)
   } catch (error) {
-    console.error('Error saving to localStorage:', error)
+    console.error('Error saving description to localStorage:', error)
   }
+}
+
+/**
+ * Get audio from IndexedDB
+ */
+async function getAudioFromIndexedDB(
+  planetName: string,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const request = indexedDB.open('SolarSystemCache', 1)
+
+      request.onerror = () => {
+        console.error('Error opening IndexedDB')
+        resolve(null)
+      }
+
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction(['audio'], 'readonly')
+        const store = transaction.objectStore('audio')
+        const getRequest = store.get(planetName)
+
+        getRequest.onsuccess = () => {
+          if (getRequest.result) {
+            console.log(`[Cache] Found audio in IndexedDB for ${planetName}`)
+            resolve(getRequest.result.audio)
+          } else {
+            console.log(`[Cache] No audio found in IndexedDB for ${planetName}`)
+            resolve(null)
+          }
+        }
+
+        getRequest.onerror = () => {
+          console.error('Error reading audio from IndexedDB')
+          resolve(null)
+        }
+      }
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        if (!db.objectStoreNames.contains('audio')) {
+          db.createObjectStore('audio', { keyPath: 'planetName' })
+        }
+      }
+    } catch (error) {
+      console.error('Error accessing IndexedDB:', error)
+      resolve(null)
+    }
+  })
+}
+
+/**
+ * Save audio to IndexedDB
+ */
+async function saveAudioToIndexedDB(
+  planetName: string,
+  audioBase64: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const request = indexedDB.open('SolarSystemCache', 1)
+
+      request.onerror = () => {
+        console.error('Error opening IndexedDB')
+        reject(new Error('Failed to open IndexedDB'))
+      }
+
+      request.onsuccess = () => {
+        const db = request.result
+        const transaction = db.transaction(['audio'], 'readwrite')
+        const store = transaction.objectStore('audio')
+        const putRequest = store.put({
+          planetName,
+          audio: audioBase64,
+        })
+
+        putRequest.onsuccess = () => {
+          console.log(`[Cache] Saved audio to IndexedDB for ${planetName}`)
+          resolve()
+        }
+
+        putRequest.onerror = () => {
+          console.error('Error saving audio to IndexedDB')
+          reject(new Error('Failed to save audio'))
+        }
+      }
+
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        if (!db.objectStoreNames.contains('audio')) {
+          db.createObjectStore('audio', { keyPath: 'planetName' })
+        }
+      }
+    } catch (error) {
+      console.error('Error accessing IndexedDB:', error)
+      reject(error)
+    }
+  })
 }
 
 export function Scene() {
@@ -90,6 +211,7 @@ export function Scene() {
   }
 
   const handlePlanetClick = (name: string, position: THREE.Vector3) => {
+    console.log(`[Click] Planet/Sun clicked: ${name}`)
     setSelectedPlanet(name)
     setPlanetPosition(position.clone())
     setShouldAutoPlay(true) // Enable autoplay for this interaction
@@ -112,12 +234,25 @@ export function Scene() {
     const getPlanetDescription = async () => {
       if (!selectedPlanet) return
 
-      // Check local storage first
-      const cachedData = getPlanetDataFromStorage(selectedPlanet)
-      if (cachedData?.description) {
-        setPlanetDescription(cachedData.description)
+      console.log(`[Description] Fetching description for: ${selectedPlanet}`)
+
+      // Check local storage first (works for planets and Sun)
+      const cachedDescription = getPlanetDescriptionFromStorage(selectedPlanet)
+      if (cachedDescription) {
+        console.log(
+          `[Description] Using cached description for: ${selectedPlanet}`,
+        )
+        setPlanetDescription(cachedDescription)
         return
       }
+
+      console.log(
+        `[Description] No cache found, fetching from API for: ${selectedPlanet}`,
+      )
+
+      // Determine if it's the Sun or a planet
+      const isSun = selectedPlanet === 'Sun'
+      const objectType = isSun ? 'matahari' : 'planet'
 
       // If not in cache, fetch from API
       const response = await openai.current?.chat.completions.create({
@@ -125,20 +260,23 @@ export function Scene() {
         messages: [
           {
             role: 'system',
-            content: `Anda adalah seorang profesor astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya. Anda akan memberikan penjelasan singkat dan padat tentang planet yang diminta, dengan fakta menarik dan informasi penting. Anda akan menjelaskan ini kepada anak-anak sekolah TK B dengan usia 5-6 tahun. Nama sekolahnya adalah TK Islam Cikal Cendikia, nama kelasnya adalah Kelas Al-Fil. Jelaskan dengan intonasi dan gaya bahasa yang menarik dan atraktif untuk anak-anak usia 5-6 tahun. gunakan penekanan intonasi yang sesuai dengan kondisi planet tersebut. Selalu sapa anak-anak dengan menyebut nama sekolahnya agar mereka merasa senang dan semakin bersemangat untuk belajar.`,
+            content: `Anda adalah seorang profesor astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya dan matahari. Anda akan memberikan penjelasan singkat dan padat tentang ${objectType} yang diminta, dengan fakta menarik dan informasi penting. Anda akan menjelaskan ini kepada anak-anak sekolah TK B dengan usia 5-6 tahun. Nama sekolahnya adalah TK Islam Cikal Cendikia, nama kelasnya adalah Kelas Al-Fil. Jelaskan dengan intonasi dan gaya bahasa yang menarik dan atraktif untuk anak-anak usia 5-6 tahun. gunakan penekanan intonasi yang sesuai dengan kondisi ${objectType} tersebut. Selalu sapa anak-anak dengan menyebut nama sekolahnya agar mereka merasa senang dan semakin bersemangat untuk belajar.`,
           },
           {
             role: 'user',
-            content: `Ceritakan aku tentang planet ${selectedPlanet} dalam bahasa indonesia. Jelaskan secara singkat dan padat. Penjelasan harus mengandung fakta menarik dan informasi penting tentang planet tersebut.`,
+            content: `Ceritakan aku tentang ${isSun ? 'matahari' : `planet ${selectedPlanet}`} dalam bahasa indonesia. Jelaskan secara singkat dan padat. Penjelasan harus mengandung fakta menarik dan informasi penting tentang ${objectType} tersebut.`,
           },
         ],
       })
 
       if (response?.choices[0].message.content) {
         const description = response.choices[0].message.content
+        console.log(
+          `[Description] Received description from API for: ${selectedPlanet}`,
+        )
         setPlanetDescription(description)
-        // Save to local storage
-        savePlanetDataToStorage(selectedPlanet, { description })
+        // Save to local storage (works for planets and Sun)
+        savePlanetDescriptionToStorage(selectedPlanet, description)
       }
     }
     getPlanetDescription()
@@ -148,11 +286,15 @@ export function Scene() {
     const getPlanetDescriptionAudio = async () => {
       if (!planetDescription || !selectedPlanet) return
 
+      console.log(`[Audio] Fetching audio for: ${selectedPlanet}`)
       setIsLoadingAudio(true)
 
-      // Check local storage first
-      const cachedData = getPlanetDataFromStorage(selectedPlanet)
-      if (cachedData?.audio) {
+      // Check IndexedDB first (works for planets and Sun)
+      const cachedAudio = await getAudioFromIndexedDB(selectedPlanet)
+      if (cachedAudio) {
+        console.log(
+          `[Audio] Using cached audio from IndexedDB for: ${selectedPlanet}`,
+        )
         // Convert base64 back to blob URL
         try {
           // Clean up old audio URL if exists
@@ -160,7 +302,7 @@ export function Scene() {
             URL.revokeObjectURL(previousAudioUrlRef.current)
           }
 
-          const blob = convertBase64ToBlob(cachedData.audio)
+          const blob = convertBase64ToBlob(cachedAudio)
           const url = URL.createObjectURL(blob)
           previousAudioUrlRef.current = url
           setAudioUrl(url)
@@ -176,7 +318,16 @@ export function Scene() {
       try {
         const response = await openai.current?.audio.speech.create({
           model: 'gpt-4o-mini-tts',
-          voice: 'alloy',
+          voice: 'sage',
+          instructions: `Affect/personality: A cheerful guide 
+
+Tone: Friendly, clear, and reassuring, creating a calm atmosphere and making the listener feel confident and comfortable.
+
+Pronunciation: Clear, articulate, and steady, ensuring each instruction is easily understood while maintaining a natural, conversational flow.
+
+Pause: Brief, purposeful pauses after key instructions (e.g., "cross the street" and "turn right") to allow time for the listener to process the information and follow along.
+
+Emotion: Warm and supportive, conveying empathy and care, ensuring the listener feels guided and safe throughout the journey.`,
           input: planetDescription,
           response_format: 'mp3',
         })
@@ -195,8 +346,14 @@ export function Scene() {
         previousAudioUrlRef.current = url
         setAudioUrl(url)
 
-        // Save to local storage
-        savePlanetDataToStorage(selectedPlanet, { audio: base64 })
+        console.log(`[Audio] Received audio from API for: ${selectedPlanet}`)
+        // Save to IndexedDB (works for planets and Sun)
+        try {
+          await saveAudioToIndexedDB(selectedPlanet, base64)
+        } catch (error) {
+          console.error('Failed to save audio to IndexedDB:', error)
+          // Continue even if save fails
+        }
       } catch (error) {
         console.error('Error loading audio:', error)
       } finally {
@@ -236,7 +393,7 @@ export function Scene() {
         <CameraController targetPosition={planetPosition} />
 
         {/* Sun */}
-        <Sun />
+        <Sun onClick={handlePlanetClick} />
 
         {/* Planets with realistic-ish orbital distances and sizes */}
         {/* Mercury */}
