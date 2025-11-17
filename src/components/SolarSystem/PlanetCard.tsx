@@ -303,7 +303,7 @@ export function PlanetCard({
                     }}
                   />
                 ) : (
-                  <div className="w-48 h-48 rounded-lg border border-white/20 shadow-lg bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                  <div className="w-48 h-48 rounded-lg border border-white/20 shadow-lg bg-linear-to-br from-gray-800 to-gray-900 flex items-center justify-center">
                     <span className="text-white text-sm font-medium">
                       {planetInfo.name}
                     </span>

@@ -10,6 +10,62 @@ import { CameraController } from './CameraController'
 import { planetData } from '../../data/planetData'
 import OpenAI from 'openai'
 
+function convertBlobToBase64(blob: Blob): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function convertBase64ToBlob(base64: string): Blob {
+  const byteString = atob(base64.split(',')[1])
+  const mimeString = base64.split(',')[0].split(':')[1].split(';')[0]
+  const ab = new ArrayBuffer(byteString.length)
+  const ia = new Uint8Array(ab)
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i)
+  }
+  return new Blob([ab], { type: mimeString })
+}
+
+function getPlanetDataFromStorage(planetName: string): {
+  description?: string
+  audio?: string
+} | null {
+  try {
+    const storedData = localStorage.getItem('planetData')
+    if (!storedData) return null
+
+    const allPlanetData = JSON.parse(storedData)
+    return allPlanetData[planetName] || null
+  } catch (error) {
+    console.error('Error reading from localStorage:', error)
+    return null
+  }
+}
+
+function savePlanetDataToStorage(
+  planetName: string,
+  data: { description?: string; audio?: string },
+) {
+  try {
+    const storedData = localStorage.getItem('planetData')
+    const allPlanetData = storedData ? JSON.parse(storedData) : {}
+
+    // Merge existing data with new data
+    allPlanetData[planetName] = {
+      ...allPlanetData[planetName],
+      ...data,
+    }
+
+    localStorage.setItem('planetData', JSON.stringify(allPlanetData))
+  } catch (error) {
+    console.error('Error saving to localStorage:', error)
+  }
+}
+
 export function Scene() {
   const [speedScale, setSpeedScale] = useState([1])
   const [selectedPlanet, setSelectedPlanet] = useState<string | null>(null)
@@ -24,6 +80,7 @@ export function Scene() {
   const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
 
   const openai = useRef<OpenAI | null>(null)
+  const previousAudioUrlRef = useRef<string | null>(null)
 
   if (!openai.current) {
     openai.current = new OpenAI({
@@ -44,15 +101,25 @@ export function Scene() {
     setPlanetDescription(null)
     setShouldAutoPlay(false)
     // Clean up audio URL
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl)
-      setAudioUrl(null)
+    if (previousAudioUrlRef.current) {
+      URL.revokeObjectURL(previousAudioUrlRef.current)
+      previousAudioUrlRef.current = null
     }
+    setAudioUrl(null)
   }
 
   useEffect(() => {
     const getPlanetDescription = async () => {
       if (!selectedPlanet) return
+
+      // Check local storage first
+      const cachedData = getPlanetDataFromStorage(selectedPlanet)
+      if (cachedData?.description) {
+        setPlanetDescription(cachedData.description)
+        return
+      }
+
+      // If not in cache, fetch from API
       const response = await openai.current?.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [
@@ -68,49 +135,76 @@ export function Scene() {
       })
 
       if (response?.choices[0].message.content) {
-        setPlanetDescription(response?.choices[0].message.content)
+        const description = response.choices[0].message.content
+        setPlanetDescription(description)
+        // Save to local storage
+        savePlanetDataToStorage(selectedPlanet, { description })
       }
     }
     getPlanetDescription()
   }, [selectedPlanet])
 
   useEffect(() => {
-    const getPlaentDescriptionAudio = async () => {
-      if (!planetDescription) return
+    const getPlanetDescriptionAudio = async () => {
+      if (!planetDescription || !selectedPlanet) return
 
       setIsLoadingAudio(true)
+
+      // Check local storage first
+      const cachedData = getPlanetDataFromStorage(selectedPlanet)
+      if (cachedData?.audio) {
+        // Convert base64 back to blob URL
+        try {
+          // Clean up old audio URL if exists
+          if (previousAudioUrlRef.current) {
+            URL.revokeObjectURL(previousAudioUrlRef.current)
+          }
+
+          const blob = convertBase64ToBlob(cachedData.audio)
+          const url = URL.createObjectURL(blob)
+          previousAudioUrlRef.current = url
+          setAudioUrl(url)
+          setIsLoadingAudio(false)
+          return
+        } catch (error) {
+          console.error('Error converting cached audio:', error)
+          // Fall through to fetch from API
+        }
+      }
+
+      // If not in cache, fetch from API
       try {
         const response = await openai.current?.audio.speech.create({
           model: 'gpt-4o-mini-tts',
           voice: 'alloy',
           input: planetDescription,
+          response_format: 'mp3',
         })
 
         if (!response?.body) return
 
-        const reader = response.body.getReader()
-        const chunks: Uint8Array[] = []
-
-        // Read all chunks from the stream
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          if (value) chunks.push(value)
+        // Clean up old audio URL if exists
+        if (previousAudioUrlRef.current) {
+          URL.revokeObjectURL(previousAudioUrlRef.current)
         }
 
-        // Combine all chunks into a single Blob
-        const audioBlob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' })
+        const audioBlob = await response.blob()
         const url = URL.createObjectURL(audioBlob)
+        const base64 = await convertBlobToBase64(audioBlob)
 
+        previousAudioUrlRef.current = url
         setAudioUrl(url)
+
+        // Save to local storage
+        savePlanetDataToStorage(selectedPlanet, { audio: base64 })
       } catch (error) {
         console.error('Error loading audio:', error)
       } finally {
         setIsLoadingAudio(false)
       }
     }
-    getPlaentDescriptionAudio()
-  }, [planetDescription])
+    getPlanetDescriptionAudio()
+  }, [planetDescription, selectedPlanet])
 
   return (
     <div
