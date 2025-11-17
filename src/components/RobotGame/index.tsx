@@ -3,29 +3,78 @@ import { RobotScene } from './RobotScene'
 import { CommandPanel } from './CommandPanel'
 import { RobotState, Command, Direction, GameConfig } from './types'
 import { parseCommands } from './commandParser'
+import { useVoiceInput } from './useVoiceInput'
 
 const DEFAULT_CONFIG: GameConfig = {
   gridSize: 6,
   tileSize: 1,
 }
 
+const randomizePosition = (gridSize: number) => {
+  return {
+    x: Math.floor(Math.random() * gridSize),
+    z: Math.floor(Math.random() * gridSize),
+  }
+}
+
+const randomizeGoalPosition = (gridSize: number) => {
+  return {
+    x: Math.floor(Math.random() * gridSize),
+    z: Math.floor(Math.random() * gridSize),
+  }
+}
+
+const randomizeRotation = (): Direction => {
+  return Math.floor(Math.random() * 4) as unknown as Direction
+}
+
 export function RobotGame() {
   const [config] = useState<GameConfig>(DEFAULT_CONFIG)
 
   const [robotState, setRobotState] = useState<RobotState>({
-    position: { x: 2, z: 2 }, // Start in middle of grid
-    rotation: Direction.NORTH,
+    position: randomizePosition(config.gridSize), // Start in middle of grid
+    rotation: randomizeRotation(),
   })
-  const [goalPosition, setGoalPosition] = useState({ x: 5, z: 5 })
+  const [goalPosition, setGoalPosition] = useState(
+    randomizeGoalPosition(config.gridSize),
+  )
   const [isAnimating, setIsAnimating] = useState(false)
   const [commandInput, setCommandInput] = useState('')
   const [parsedCommands, setParsedCommands] = useState<Command[]>([])
   const [hasWon, setHasWon] = useState(false)
   const [commandQueue, setCommandQueue] = useState<Command[][]>([])
+  const [showCommands, setShowCommands] = useState(false) // Default to hidden
+  const [lastHeardCommand, setLastHeardCommand] = useState<string>('')
   const isProcessingQueue = useRef(false)
   const robotStateRef = useRef(robotState)
   const cheerAudioRef = useRef<HTMLAudioElement | null>(null)
   const audioPrimedRef = useRef(false)
+
+  // Voice input hook
+  const {
+    isListening,
+    isProcessing,
+    error: voiceError,
+    toggleListening,
+  } = useVoiceInput({
+    apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+    streamingMode: true,
+    chunkDuration: 3000,
+    onTranscript: (text, isFinal) => {
+      if (isFinal && text.length > 0) {
+        console.log('🎤 Voice transcript received:', text)
+        setLastHeardCommand(text)
+
+        const voiceCommands = parseCommands(text)
+        if (voiceCommands.length > 0) {
+          console.log('✅ Auto-executing voice commands:', voiceCommands)
+          handleExecute(voiceCommands)
+        }
+
+        setTimeout(() => setLastHeardCommand(''), 2000)
+      }
+    },
+  })
 
   // Initialize cheer audio
   useEffect(() => {
@@ -125,6 +174,38 @@ export function RobotGame() {
     }
   }, [hasWon])
 
+  // Spacebar toggle for voice commands
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Toggle voice on spacebar press (not typing in an input)
+      if (
+        e.code === 'Space' &&
+        !isAnimating &&
+        !(
+          e.target instanceof HTMLInputElement ||
+          e.target instanceof HTMLTextAreaElement
+        )
+      ) {
+        e.preventDefault() // Prevent page scroll
+
+        if (isListening) {
+          console.log('🛑 Spacebar pressed - Stopping voice input')
+        } else {
+          console.log('🎤 Spacebar pressed - Starting voice input')
+          primeAudio()
+        }
+
+        toggleListening()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isAnimating, isListening, toggleListening, primeAudio])
+
   const executeCommands = async (commands: Command[]) => {
     if (commands.length === 0) return
 
@@ -220,6 +301,17 @@ export function RobotGame() {
           break
         }
 
+        case 'turnAround': {
+          currentState = {
+            ...currentState,
+            rotation: (currentState.rotation + 180) % 360,
+          }
+          setRobotState(currentState)
+          robotStateRef.current = currentState // Update ref immediately
+          console.log('🔄 Turned around to', currentState.rotation, '°')
+          break
+        }
+
         case 'turn': {
           const degrees = command.value || 0
           currentState = {
@@ -288,9 +380,10 @@ export function RobotGame() {
     primeAudio()
 
     setRobotState({
-      position: { x: 2, z: 2 }, // Reset to middle of grid
-      rotation: Direction.NORTH,
+      position: randomizePosition(config.gridSize),
+      rotation: randomizeRotation(),
     })
+    setGoalPosition(randomizeGoalPosition(config.gridSize))
     setHasWon(false)
     setCommandInput('')
     setParsedCommands([])
@@ -314,15 +407,193 @@ export function RobotGame() {
         isAnimating={isAnimating}
       />
 
-      <CommandPanel
-        onExecute={handleExecute}
-        isAnimating={isAnimating}
-        parsedCommands={parsedCommands}
-        commandInput={commandInput}
-        onInputChange={handleCommandInputChange}
-        onUserInteraction={primeAudio}
-        language="en"
-      />
+      {/* Floating toggle button for command panel */}
+      <button
+        onClick={() => {
+          primeAudio()
+          setShowCommands(!showCommands)
+        }}
+        style={{
+          position: 'absolute',
+          top: '20px',
+          left: '20px',
+          padding: '12px 16px',
+          background: showCommands ? '#f44336' : '#4CAF50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          transition: 'all 0.3s ease',
+        }}
+      >
+        {showCommands ? '✖️ Hide' : '🎮 Show'} Commands
+      </button>
+
+      {/* Command panel - conditionally rendered */}
+      {showCommands && (
+        <CommandPanel
+          onExecute={handleExecute}
+          isAnimating={isAnimating}
+          parsedCommands={parsedCommands}
+          commandInput={commandInput}
+          onInputChange={handleCommandInputChange}
+          onUserInteraction={primeAudio}
+          language="en"
+        />
+      )}
+
+      {/* Floating voice command button - bottom center */}
+      <button
+        onClick={() => {
+          primeAudio()
+          toggleListening()
+        }}
+        disabled={isAnimating}
+        style={{
+          position: 'absolute',
+          bottom: '100px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '16px 24px',
+          background: isListening
+            ? 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
+            : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          border: 'none',
+          borderRadius: '50px',
+          cursor: isAnimating ? 'not-allowed' : 'pointer',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          boxShadow: isListening
+            ? '0 4px 20px rgba(255, 107, 107, 0.5), 0 0 0 0 rgba(255, 107, 107, 0.7)'
+            : '0 4px 20px rgba(102, 126, 234, 0.4)',
+          zIndex: 1000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          transition: 'all 0.3s ease',
+          opacity: isAnimating ? 0.5 : 1,
+          animation: isListening ? 'pulse 1.5s infinite' : 'none',
+        }}
+      >
+        <span style={{ fontSize: '20px' }}>{isListening ? '🎤' : '🎙️'}</span>
+        <span>{isListening ? 'Listening...' : 'Voice Command'}</span>
+        {isProcessing && <span style={{ fontSize: '12px' }}>⏳</span>}
+      </button>
+
+      {/* Spacebar hint */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '50px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          padding: '8px 12px',
+          background: 'rgba(0, 0, 0, 0.6)',
+          color: 'white',
+          borderRadius: '6px',
+          fontSize: '12px',
+          zIndex: 999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          opacity: isAnimating ? 0.3 : 0.8,
+        }}
+      >
+        <kbd
+          style={{
+            background: 'rgba(255, 255, 255, 0.2)',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontFamily: 'monospace',
+            fontSize: '11px',
+          }}
+        >
+          SPACE
+        </kbd>
+        <span>Press to {isListening ? 'stop' : 'speak'}</span>
+      </div>
+
+      {/* Last heard command - floating display */}
+      {lastHeardCommand && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 20px',
+            background: 'rgba(76, 175, 80, 0.95)',
+            color: 'white',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            animation: 'fadeIn 0.3s ease',
+            maxWidth: '80%',
+            textAlign: 'center',
+          }}
+        >
+          ✅ "{lastHeardCommand}"
+        </div>
+      )}
+
+      {/* Voice error display */}
+      {voiceError && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '100px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 20px',
+            background: 'rgba(244, 67, 54, 0.95)',
+            color: 'white',
+            borderRadius: '12px',
+            fontSize: '12px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+            zIndex: 1000,
+            maxWidth: '80%',
+            textAlign: 'center',
+          }}
+        >
+          ❌ {voiceError}
+        </div>
+      )}
+
+      {/* CSS animation for pulse effect */}
+      <style>{`
+        @keyframes pulse {
+          0% {
+            box-shadow: 0 4px 20px rgba(255, 107, 107, 0.5), 0 0 0 0 rgba(255, 107, 107, 0.7);
+          }
+          50% {
+            box-shadow: 0 4px 20px rgba(255, 107, 107, 0.5), 0 0 0 15px rgba(255, 107, 107, 0);
+          }
+          100% {
+            box-shadow: 0 4px 20px rgba(255, 107, 107, 0.5), 0 0 0 0 rgba(255, 107, 107, 0);
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateX(-50%) translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+          }
+        }
+      `}</style>
 
       {/* Status panel */}
       <div
@@ -405,7 +676,7 @@ export function RobotGame() {
             fontWeight: 'bold',
           }}
         >
-          🎉 Goal Reached! 🎉
+          🎉 Misi Tercapai! 🎉
           <div
             style={{
               fontSize: '16px',
@@ -413,7 +684,7 @@ export function RobotGame() {
               fontWeight: 'normal',
             }}
           >
-            Great job navigating the robot!
+            Selamat! Kamu berhasil mengarahkan robot!
           </div>
           <button
             onClick={handleReset}
@@ -429,7 +700,7 @@ export function RobotGame() {
               cursor: 'pointer',
             }}
           >
-            Play Again
+            Mainkan Lagi
           </button>
         </div>
       )}

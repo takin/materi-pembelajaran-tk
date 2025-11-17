@@ -34,7 +34,7 @@ export function parseCommands(input: string): Command[] {
   // Split by comma, newline, "and", "then" to support multiple commands
   const parts = input
     .toLowerCase()
-    .split(/[,\n]|\s+lalu\s+|\s+kemudian\s+/)
+    .split(/[,\n]|\s+lalu\s+|\s+kemudian\s+|\s+dan\s+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
 
@@ -43,6 +43,8 @@ export function parseCommands(input: string): Command[] {
 
     // Check if it's a move command first
     const hasMoveKeyword = part.includes('jalan') || part.includes('maju')
+    const hasTurnAroundKeyword =
+      part.includes('putar') || part.includes('putar')
 
     if (hasMoveKeyword) {
       // Match "move forward X" or "move X" or "forward X" (with digit or word)
@@ -74,6 +76,12 @@ export function parseCommands(input: string): Command[] {
         })
         continue
       }
+    }
+
+    if (hasTurnAroundKeyword) {
+      commands.push({ type: 'turnAround' })
+      console.log('    ✅ Matched TURN AROUND')
+      continue
     }
 
     // Match "turn left" or "left"
@@ -123,6 +131,8 @@ export function commandsToText(commands: Command[]): string {
           return 'Belok kanan'
         case 'turn':
           return `Putar ${cmd.value}°`
+        case 'turnAround':
+          return 'Putar 180°'
         default:
           return 'Perintah tidak dikenal'
       }

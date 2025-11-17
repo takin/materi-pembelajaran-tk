@@ -18,7 +18,7 @@ export enum Direction {
 }
 
 export interface Command {
-  type: 'move' | 'turn' | 'turnLeft' | 'turnRight'
+  type: 'move' | 'turn' | 'turnLeft' | 'turnRight' | 'turnAround'
   value?: number // for move: steps, for turn: degrees
 }
 
@@ -26,4 +26,3 @@ export interface GameConfig {
   gridSize: number
   tileSize: number
 }
-
