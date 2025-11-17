@@ -358,7 +358,7 @@ export function Scene() {
 
 Tone: Friendly, clear, dan menyenangkan, membuat suasana tenang dan membuat pembelajar merasa percaya diri dan nyaman.
 
-Pronunciation: Jelas, bersahabat, dan tenang, memastikan setiap instruksi mudah dipahami sambil mempertahankan alur percakapan alami.
+Pronunciation: Jelas, bersahabat, dan tenang, memastikan setiap instruksi mudah dipahami sambil mempertahankan alur percakapan alami. Pastikan kamu mengucapkan singkatan seperti SWT (Subahanahu Wa Ta'ala), SAW (Sallallahu Alaihi Wa Sallam)!!!, dll.
 
 Pause: Singkat, tujuan berhenti setelah penjelasan penting (misalnya, "penjelasan tentang planet Venus") untuk memberikan waktu bagi pembelajar untuk memproses informasi dan mengikuti.
 
