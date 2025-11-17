@@ -48,7 +48,7 @@ export function CommandPanel({
         }
 
         // Clear last heard after 2 seconds
-        setTimeout(() => setLastHeardCommand(''), 2000)
+        setTimeout(() => setLastHeardCommand(''), 4000)
       }
     },
   })

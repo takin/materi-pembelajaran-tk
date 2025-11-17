@@ -205,7 +205,7 @@ export function useVoiceInput({
       const transcription =
         await openaiClientRef.current.audio.transcriptions.create({
           file: audioFile,
-          language: 'en',
+          language: 'id',
           model: 'gpt-4o-mini-transcribe',
           prompt:
             'You are a helpful assistant that transcribes audio to text. your task is to translate the audio to english text. for example if teh audio is "maju dua langkah", you should translate it to "move forward 2", "belok kiri" to "turn left" and "belok kanan" to "turn right". the audio is in indonesian language.',
