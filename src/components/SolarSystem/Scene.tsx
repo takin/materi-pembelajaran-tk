@@ -7,6 +7,7 @@ import { Planet } from './Planet'
 import { Slider } from '@/components/ui/slider'
 import { PlanetCard } from './PlanetCard'
 import { CameraController } from './CameraController'
+import { PlanetTracker } from './PlanetTracker'
 import { planetData } from '../../data/planetData'
 import OpenAI from 'openai'
 
@@ -203,6 +204,35 @@ export function Scene() {
   const openai = useRef<OpenAI | null>(null)
   const previousAudioUrlRef = useRef<string | null>(null)
 
+  // Helper functions to get planet orbit data
+  const getPlanetOrbitRadius = (planetName: string): number => {
+    const orbitRadii: Record<string, number> = {
+      Mercury: 8,
+      Venus: 12,
+      Earth: 16,
+      Mars: 20,
+      Jupiter: 30,
+      Saturn: 40,
+      Uranus: 50,
+      Neptune: 60,
+    }
+    return orbitRadii[planetName] || 0
+  }
+
+  const getPlanetOrbitSpeed = (planetName: string): number => {
+    const orbitSpeeds: Record<string, number> = {
+      Mercury: 4.15,
+      Venus: 1.62,
+      Earth: 1,
+      Mars: 0.53,
+      Jupiter: 0.084,
+      Saturn: 0.034,
+      Uranus: 0.012,
+      Neptune: 0.006,
+    }
+    return orbitSpeeds[planetName] || 0
+  }
+
   if (!openai.current) {
     openai.current = new OpenAI({
       apiKey: import.meta.env.VITE_OPENAI_API_KEY,
@@ -213,7 +243,12 @@ export function Scene() {
   const handlePlanetClick = (name: string, position: THREE.Vector3) => {
     console.log(`[Click] Planet/Sun clicked: ${name}`)
     setSelectedPlanet(name)
-    setPlanetPosition(position.clone())
+    // Set initial position - PlanetTracker will update it continuously
+    if (name === 'Sun') {
+      setPlanetPosition(new THREE.Vector3(0, 0, 0))
+    } else {
+      setPlanetPosition(position.clone())
+    }
     setShouldAutoPlay(true) // Enable autoplay for this interaction
   }
 
@@ -260,7 +295,7 @@ export function Scene() {
         messages: [
           {
             role: 'system',
-            content: `Anda adalah seorang profesor astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya dan matahari. Anda akan memberikan penjelasan singkat dan padat tentang ${objectType} yang diminta, dengan fakta menarik dan informasi penting. Anda akan menjelaskan ini kepada anak-anak sekolah TK B dengan usia 5-6 tahun. Nama sekolahnya adalah TK Islam Cikal Cendikia, nama kelasnya adalah Kelas Al-Fil. Jelaskan dengan intonasi dan gaya bahasa yang menarik dan atraktif untuk anak-anak usia 5-6 tahun. gunakan penekanan intonasi yang sesuai dengan kondisi ${objectType} tersebut. Selalu sapa anak-anak dengan menyebut nama sekolahnya agar mereka merasa senang dan semakin bersemangat untuk belajar.`,
+            content: `Anda adalah seorang profesor astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya dan matahari. Anda akan memberikan penjelasan singkat dan padat tentang ${objectType} yang diminta, dengan fakta menarik dan informasi penting. Anda akan menjelaskan ini kepada anak-anak sekolah TK B dengan usia 5-6 tahun. Nama sekolahnya adalah TK Islam Cikal Cendikia, nama kelasnya adalah Kelas Al-Fil. Jelaskan dengan intonasi dan gaya bahasa yang menarik dan atraktif untuk anak-anak usia 5-6 tahun. Selalu sapa anak-anak dengan Salam dalam Agama Islam. Gunakan bahasa indonesia yang baik dan benar. Tambahkan juga penekanan pada kekuasaan Allah SWT.`,
           },
           {
             role: 'user',
@@ -319,15 +354,15 @@ export function Scene() {
         const response = await openai.current?.audio.speech.create({
           model: 'gpt-4o-mini-tts',
           voice: 'sage',
-          instructions: `Affect/personality: A cheerful guide 
+          instructions: `Affect/personality: Seorang ahli astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya dan matahari dengan bahasa indonesia yang baik dan benar dan dengan gaya bahasa seorang guru TK.
 
-Tone: Friendly, clear, and reassuring, creating a calm atmosphere and making the listener feel confident and comfortable.
+Tone: Friendly, clear, dan menyenangkan, membuat suasana tenang dan membuat pembelajar merasa percaya diri dan nyaman.
 
-Pronunciation: Clear, articulate, and steady, ensuring each instruction is easily understood while maintaining a natural, conversational flow.
+Pronunciation: Jelas, bersahabat, dan tenang, memastikan setiap instruksi mudah dipahami sambil mempertahankan alur percakapan alami.
 
-Pause: Brief, purposeful pauses after key instructions (e.g., "cross the street" and "turn right") to allow time for the listener to process the information and follow along.
+Pause: Singkat, tujuan berhenti setelah penjelasan penting (misalnya, "penjelasan tentang planet Venus") untuk memberikan waktu bagi pembelajar untuk memproses informasi dan mengikuti.
 
-Emotion: Warm and supportive, conveying empathy and care, ensuring the listener feels guided and safe throughout the journey.`,
+Emosi: Hangat dan mendukung, mengirimkan empati dan perhatian, memastikan pembelajar merasa dipandu dan aman sepanjang perjalanan.`,
           input: planetDescription,
           response_format: 'mp3',
         })
@@ -382,15 +417,44 @@ Emotion: Warm and supportive, conveying empathy and care, ensuring the listener 
 
         {/* Camera controls */}
         <OrbitControls
-          enablePan={true}
+          enablePan={!selectedPlanet}
           enableZoom={true}
-          enableRotate={true}
+          enableRotate={!selectedPlanet}
           minDistance={5}
           maxDistance={300}
         />
 
-        {/* Camera Controller for zoom animation */}
-        <CameraController targetPosition={planetPosition} />
+        {/* Camera Controller for zoom animation and tracking */}
+        <CameraController
+          targetPosition={planetPosition}
+          isTracking={!!selectedPlanet}
+        />
+
+        {/* Planet Tracker - continuously updates position of selected planet */}
+        {selectedPlanet && selectedPlanet !== 'Sun' && (
+          <PlanetTracker
+            planetName={selectedPlanet}
+            orbitRadius={getPlanetOrbitRadius(selectedPlanet)}
+            orbitSpeed={getPlanetOrbitSpeed(selectedPlanet)}
+            speedScale={speedScale[0]}
+            onPositionUpdate={(position) => {
+              setPlanetPosition(position)
+            }}
+          />
+        )}
+
+        {/* Sun Tracker - for Sun position (static at center) */}
+        {selectedPlanet === 'Sun' && (
+          <PlanetTracker
+            planetName="Sun"
+            orbitRadius={0}
+            orbitSpeed={0}
+            speedScale={1}
+            onPositionUpdate={() => {
+              setPlanetPosition(new THREE.Vector3(0, 0, 0))
+            }}
+          />
+        )}
 
         {/* Sun */}
         <Sun onClick={handlePlanetClick} />
