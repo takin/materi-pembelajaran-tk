@@ -79,7 +79,7 @@ export function RobotGame() {
   // Initialize cheer audio
   useEffect(() => {
     // Create audio element for victory sound - kids cheering
-    cheerAudioRef.current = new Audio('/yeey.mp3')
+    cheerAudioRef.current = new Audio('/audio/yeey.mp3')
     cheerAudioRef.current.volume = 0.6 // 60% volume
 
     // Preload the audio
@@ -101,7 +101,6 @@ export function RobotGame() {
   // Prime audio on first user interaction (browser autoplay restriction workaround)
   const primeAudio = () => {
     if (!audioPrimedRef.current && cheerAudioRef.current) {
-      console.log('🔓 Priming audio...')
       // Play and immediately pause to "unlock" audio for later
       cheerAudioRef.current
         .play()
@@ -109,7 +108,6 @@ export function RobotGame() {
           cheerAudioRef.current?.pause()
           cheerAudioRef.current!.currentTime = 0
           audioPrimedRef.current = true
-          console.log('✅ Audio primed successfully!')
         })
         .catch((err) => {
           console.error('⚠️ Audio priming failed:', err)

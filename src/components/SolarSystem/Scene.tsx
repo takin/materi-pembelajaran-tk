@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Stars } from '@react-three/drei'
 import * as THREE from 'three'
@@ -7,8 +7,8 @@ import { Planet } from './Planet'
 import { Slider } from '@/components/ui/slider'
 import { PlanetCard } from './PlanetCard'
 import { CameraController } from './CameraController'
-import { PlanetInfoOverlay } from './PlanetInfoOverlay'
 import { planetData } from '../../data/planetData'
+import OpenAI from 'openai'
 
 export function Scene() {
   const [speedScale, setSpeedScale] = useState([1])
@@ -16,17 +16,101 @@ export function Scene() {
   const [planetPosition, setPlanetPosition] = useState<THREE.Vector3 | null>(
     null,
   )
-  const [cardPosition, setCardPosition] = useState({ x: 0, y: 0 })
+  const [planetDescription, setPlanetDescription] = useState<string | null>(
+    null,
+  )
+  const [audioUrl, setAudioUrl] = useState<string | null>(null)
+  const [isLoadingAudio, setIsLoadingAudio] = useState(false)
+  const [shouldAutoPlay, setShouldAutoPlay] = useState(false)
+
+  const openai = useRef<OpenAI | null>(null)
+
+  if (!openai.current) {
+    openai.current = new OpenAI({
+      apiKey: import.meta.env.VITE_OPENAI_API_KEY,
+      dangerouslyAllowBrowser: true,
+    })
+  }
 
   const handlePlanetClick = (name: string, position: THREE.Vector3) => {
     setSelectedPlanet(name)
     setPlanetPosition(position.clone())
+    setShouldAutoPlay(true) // Enable autoplay for this interaction
   }
 
   const handleCloseCard = () => {
     setSelectedPlanet(null)
     setPlanetPosition(null)
+    setPlanetDescription(null)
+    setShouldAutoPlay(false)
+    // Clean up audio URL
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl)
+      setAudioUrl(null)
+    }
   }
+
+  useEffect(() => {
+    const getPlanetDescription = async () => {
+      if (!selectedPlanet) return
+      const response = await openai.current?.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `Anda adalah seorang profesor astronomi yang ahli dalam memberikan penjelasan tentang planet-planet di tata surya. Anda akan memberikan penjelasan singkat dan padat tentang planet yang diminta, dengan fakta menarik dan informasi penting. Anda akan menjelaskan ini kepada anak-anak sekolah TK B dengan usia 5-6 tahun. Nama sekolahnya adalah TK Islam Cikal Cendikia, nama kelasnya adalah Kelas Al-Fil. Jelaskan dengan intonasi dan gaya bahasa yang menarik dan atraktif untuk anak-anak usia 5-6 tahun. gunakan penekanan intonasi yang sesuai dengan kondisi planet tersebut. Selalu sapa anak-anak dengan menyebut nama sekolahnya agar mereka merasa senang dan semakin bersemangat untuk belajar.`,
+          },
+          {
+            role: 'user',
+            content: `Ceritakan aku tentang planet ${selectedPlanet} dalam bahasa indonesia. Jelaskan secara singkat dan padat. Penjelasan harus mengandung fakta menarik dan informasi penting tentang planet tersebut.`,
+          },
+        ],
+      })
+
+      if (response?.choices[0].message.content) {
+        setPlanetDescription(response?.choices[0].message.content)
+      }
+    }
+    getPlanetDescription()
+  }, [selectedPlanet])
+
+  useEffect(() => {
+    const getPlaentDescriptionAudio = async () => {
+      if (!planetDescription) return
+
+      setIsLoadingAudio(true)
+      try {
+        const response = await openai.current?.audio.speech.create({
+          model: 'gpt-4o-mini-tts',
+          voice: 'alloy',
+          input: planetDescription,
+        })
+
+        if (!response?.body) return
+
+        const reader = response.body.getReader()
+        const chunks: Uint8Array[] = []
+
+        // Read all chunks from the stream
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          if (value) chunks.push(value)
+        }
+
+        // Combine all chunks into a single Blob
+        const audioBlob = new Blob(chunks as BlobPart[], { type: 'audio/mpeg' })
+        const url = URL.createObjectURL(audioBlob)
+
+        setAudioUrl(url)
+      } catch (error) {
+        console.error('Error loading audio:', error)
+      } finally {
+        setIsLoadingAudio(false)
+      }
+    }
+    getPlaentDescriptionAudio()
+  }, [planetDescription])
 
   return (
     <div
@@ -56,12 +140,6 @@ export function Scene() {
 
         {/* Camera Controller for zoom animation */}
         <CameraController targetPosition={planetPosition} />
-
-        {/* Planet Info Overlay for card positioning */}
-        <PlanetInfoOverlay
-          planetPosition={planetPosition}
-          onPositionUpdate={(x, y) => setCardPosition({ x, y })}
-        />
 
         {/* Sun */}
         <Sun />
@@ -169,8 +247,13 @@ export function Scene() {
       {selectedPlanet && planetData[selectedPlanet] && (
         <PlanetCard
           planetInfo={planetData[selectedPlanet]}
+          selectedPlanetName={selectedPlanet}
           onClose={handleCloseCard}
-          position={cardPosition}
+          planetDescription={planetDescription}
+          audioUrl={audioUrl}
+          isLoadingAudio={isLoadingAudio}
+          shouldAutoPlay={shouldAutoPlay}
+          onAutoPlayComplete={() => setShouldAutoPlay(false)}
         />
       )}
 
