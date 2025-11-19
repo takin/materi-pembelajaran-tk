@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RobotRouteImport } from './routes/robot'
+import { Route as HadiahRouteImport } from './routes/hadiah'
 import { Route as IndexRouteImport } from './routes/index'
 
 const RobotRoute = RobotRouteImport.update({
   id: '/robot',
   path: '/robot',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HadiahRoute = HadiahRouteImport.update({
+  id: '/hadiah',
+  path: '/hadiah',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -25,27 +31,31 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/hadiah': typeof HadiahRoute
   '/robot': typeof RobotRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/hadiah': typeof HadiahRoute
   '/robot': typeof RobotRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/hadiah': typeof HadiahRoute
   '/robot': typeof RobotRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/robot'
+  fullPaths: '/' | '/hadiah' | '/robot'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/robot'
-  id: '__root__' | '/' | '/robot'
+  to: '/' | '/hadiah' | '/robot'
+  id: '__root__' | '/' | '/hadiah' | '/robot'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HadiahRoute: typeof HadiahRoute
   RobotRoute: typeof RobotRoute
 }
 
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/robot'
       fullPath: '/robot'
       preLoaderRoute: typeof RobotRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/hadiah': {
+      id: '/hadiah'
+      path: '/hadiah'
+      fullPath: '/hadiah'
+      preLoaderRoute: typeof HadiahRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -70,6 +87,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HadiahRoute: HadiahRoute,
   RobotRoute: RobotRoute,
 }
 export const routeTree = rootRouteImport

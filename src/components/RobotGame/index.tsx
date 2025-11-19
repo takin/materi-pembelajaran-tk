@@ -456,7 +456,7 @@ export function RobotGame() {
         disabled={isAnimating}
         style={{
           position: 'absolute',
-          bottom: '100px',
+          bottom: '50px',
           left: '50%',
           transform: 'translateX(-50%)',
           padding: '16px 24px',
@@ -490,7 +490,7 @@ export function RobotGame() {
       <div
         style={{
           position: 'absolute',
-          bottom: '50px',
+          top: '50px',
           left: '50%',
           transform: 'translateX(-50%)',
           padding: '8px 12px',
@@ -524,7 +524,7 @@ export function RobotGame() {
         <div
           style={{
             position: 'absolute',
-            bottom: '100px',
+            top: '100px',
             left: '50%',
             transform: 'translateX(-50%)',
             padding: '12px 20px',
@@ -704,7 +704,7 @@ export function RobotGame() {
       )}
 
       {/* Instructions */}
-      <div
+      {/* <div
         style={{
           position: 'absolute',
           bottom: '20px',
@@ -720,7 +720,7 @@ export function RobotGame() {
       >
         🎮 Navigate the robot to the golden star! | 🖱️ Drag to rotate view | 🔍
         Scroll to zoom
-      </div>
+      </div> */}
     </div>
   )
 }

@@ -9,7 +9,7 @@ interface RobotProps {
   isAnimating: boolean
 }
 
-export function Robot({ state, config, isAnimating }: RobotProps) {
+export function Robot({ state, config }: RobotProps) {
   const groupRef = useRef<THREE.Group>(null!)
   const targetPosition = useRef(new THREE.Vector3())
   const targetRotation = useRef(0)
@@ -78,4 +78,3 @@ export function Robot({ state, config, isAnimating }: RobotProps) {
     </group>
   )
 }
-
