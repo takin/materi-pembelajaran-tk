@@ -1,7 +1,7 @@
 import { useState, memo, useRef, useCallback } from 'react'
 import { motion, useAnimationControls } from 'framer-motion'
 import { Card, CardContent } from '../ui/card'
-import { Color } from '.'
+import { Color } from './Hadiah'
 
 interface HadiahCardProps {
   personName: string
@@ -30,8 +30,6 @@ const HadiahCard = ({
   const [currentPerson, setCurrentPerson] = useState<Person>({
     name: personName,
   })
-
-  console.log('card number', index)
 
   const soundRef = useRef<HTMLAudioElement | null>(null)
 
@@ -101,6 +99,8 @@ const HadiahCard = ({
         })
     }, animationDuration)
   }, [isFlipped])
+
+  console.log('HadiahCard Component Rendered', index)
 
   return (
     <motion.div
